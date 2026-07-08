@@ -74,7 +74,7 @@ public class VelocityTemplatingEngineImpl implements VCFormatter {
      */
     @Cacheable(cacheNames = "credentialConfig", key = "#templateKey")
     protected CredentialConfig getCachedCredentialConfig(String templateKey) {
-        log.debug("Cache miss for credentialConfig with key: {}. Fetching from DB.", templateKey);
+        log.info("Cache miss for credentialConfig with key: {}. Fetching from DB.", templateKey);
         if (templateKey == null || !templateKey.contains(DELIMITER)) {
             log.error("Invalid templateKey format for getCachedCredentialConfig: {}", templateKey);
             throw new CertifyException(ErrorConstants.EXPECTED_TEMPLATE_NOT_FOUND, "Invalid template key format: " + templateKey);
@@ -215,6 +215,8 @@ public class VelocityTemplatingEngineImpl implements VCFormatter {
     @SneakyThrows
     @Override
     public String format(Map<String, Object> updatedTemplateParams) {
+        log.info("===== Entered format() =====");
+        log.info("Template Name: {}", updatedTemplateParams);
         // TODO: Isn't template name becoming too complex with VC_CONTEXTS & CREDENTIAL_TYPES both?
         String templateName = updatedTemplateParams.get(TEMPLATE_NAME).toString();
         String issuer = updatedTemplateParams.get(DID_URL).toString();
