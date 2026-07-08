@@ -306,7 +306,7 @@ public class CertifyIssuanceServiceImpl implements VCIssuanceService {
 
         } catch (DataProviderExchangeException e) {
             log.error("DataProviderExchangeException occurred. ErrorCode: {}, ErrorMessage: {}",
-            e.getErrorCode(), e.getErrorText(), e);
+            e.getErrorCode(), e.getMessage(), e);
             throw new CertifyException(e.getErrorCode());
         } catch (JSONException | JsonProcessingException e) {
             log.error(e.getMessage(), e);
