@@ -241,6 +241,7 @@ public class VelocityTemplatingEngineImpl implements VCFormatter {
         }
         VelocityContext context = new VelocityContext(updatedTemplateParams);
         engine.evaluate(context, writer, /*logTag */ templateName, vcTemplateString); // use vcTemplateString
+        log.info("Writer content:\n{}", writer);
         log.info("Rendered VC:\n{}", writer.toString());
         String rendered = writer.toString();
         log.info("========== Rendered VC ==========");
