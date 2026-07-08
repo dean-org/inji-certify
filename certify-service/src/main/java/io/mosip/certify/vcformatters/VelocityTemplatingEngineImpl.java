@@ -239,7 +239,13 @@ public class VelocityTemplatingEngineImpl implements VCFormatter {
         }
         VelocityContext context = new VelocityContext(updatedTemplateParams);
         engine.evaluate(context, writer, /*logTag */ templateName, vcTemplateString); // use vcTemplateString
-        JSONObject jsonObject = new JSONObject(writer.toString());
+        log.info("Rendered VC:\n{}", writer.toString());
+        String rendered = writer.toString();
+        log.info("========== Rendered VC ==========");
+        log.info(rendered);
+        log.info("=================================");
+
+        JSONObject jsonObject = new JSONObject(rendered);
         if (updatedTemplateParams.containsKey(VCDMConstants.CREDENTIAL_ID)) {
             jsonObject.put(VCDMConstants.ID, updatedTemplateParams.get(VCDMConstants.CREDENTIAL_ID));
         }
