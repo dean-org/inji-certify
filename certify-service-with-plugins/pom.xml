@@ -5,7 +5,9 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+
     <modelVersion>4.0.0</modelVersion>
+
     <parent>
         <groupId>io.mosip.certify</groupId>
         <artifactId>certify-parent</artifactId>
@@ -15,6 +17,7 @@
     <groupId>io.mosip.certify</groupId>
     <artifactId>certify-service-with-plugins</artifactId>
     <version>0.13.0</version>
+
     <name>certify-service-with-plugins</name>
     <description>certify vci service</description>
     <url>https://github.com/mosip/inji-certify</url>
@@ -37,106 +40,192 @@
 
     <properties>
         <certify-plugins.location>target</certify-plugins.location>
+
         <mock-certify-plugin.version>0.5.0</mock-certify-plugin.version>
         <mock-certify-plugin.fileName>mock-certify-plugin.jar</mock-certify-plugin.fileName>
+
         <mosip-identity-certify-plugin.version>0.5.0</mosip-identity-certify-plugin.version>
         <mosip-identity-certify-plugin.fileName>mosip-identity-certify-plugin.jar</mosip-identity-certify-plugin.fileName>
+
         <postgres-dataprovider-plugin.version>0.5.0</postgres-dataprovider-plugin.version>
         <postgres-dataprovider-plugin.fileName>postgres-dataprovider-plugin.jar</postgres-dataprovider-plugin.fileName>
-        <sunbird-rc-certify-integration-plugin.version>0.6.0</sunbird-rc-certify-integration-plugin.version>
-        <sunbird-rc-certify-integration-plugin.fileName>sunbird-rc-certify-integration-impl.jar</sunbird-rc-certify-integration-plugin.fileName>
     </properties>
+
     <build>
         <plugins>
+
+            <!-- =========================================================
+                 Maven Dependency Plugin
+                 Copies the plugins available from Maven repositories
+                 into target/
+                 ========================================================= -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-dependency-plugin</artifactId>
                 <version>3.8.1</version>
+
                 <executions>
                     <execution>
                         <id>copy</id>
                         <phase>package</phase>
+
                         <goals>
                             <goal>copy</goal>
                         </goals>
+
+                        <configuration>
+                            <artifactItems>
+
+                                <!-- Mock Certify Plugin -->
+                                <artifactItem>
+                                    <groupId>io.mosip.certify</groupId>
+                                    <artifactId>mock-certify-plugin</artifactId>
+                                    <version>${mock-certify-plugin.version}</version>
+                                    <outputDirectory>${certify-plugins.location}</outputDirectory>
+                                    <destFileName>${mock-certify-plugin.fileName}</destFileName>
+                                    <type>jar</type>
+                                </artifactItem>
+
+                                <!-- MOSIP Identity Certify Plugin -->
+                                <artifactItem>
+                                    <groupId>io.mosip.certify</groupId>
+                                    <artifactId>mosip-identity-certify-plugin</artifactId>
+                                    <version>${mosip-identity-certify-plugin.version}</version>
+                                    <outputDirectory>${certify-plugins.location}</outputDirectory>
+                                    <destFileName>${mosip-identity-certify-plugin.fileName}</destFileName>
+                                    <type>jar</type>
+                                </artifactItem>
+
+                                <!-- PostgreSQL Data Provider Plugin -->
+                                <artifactItem>
+                                    <groupId>io.mosip.certify</groupId>
+                                    <artifactId>postgres-dataprovider-plugin</artifactId>
+                                    <version>${postgres-dataprovider-plugin.version}</version>
+                                    <outputDirectory>${certify-plugins.location}</outputDirectory>
+                                    <destFileName>${postgres-dataprovider-plugin.fileName}</destFileName>
+                                    <type>jar</type>
+                                </artifactItem>
+
+                            </artifactItems>
+
+                            <overWriteReleases>true</overWriteReleases>
+                            <overWriteSnapshots>true</overWriteSnapshots>
+                            <overWriteIfNewer>true</overWriteIfNewer>
+                        </configuration>
                     </execution>
                 </executions>
-                <configuration>
-                    <artifactItems>
-                        <artifactItem>
-                            <groupId>io.mosip.certify</groupId>
-                            <artifactId>mock-certify-plugin</artifactId>
-                            <version>${mock-certify-plugin.version}</version>
-                            <outputDirectory>${certify-plugins.location}</outputDirectory>
-                            <destFileName>${mock-certify-plugin.fileName}</destFileName>
-                            <type>jar</type>
-                        </artifactItem>
-                        <artifactItem>
-                            <groupId>io.mosip.certify</groupId>
-                            <artifactId>mosip-identity-certify-plugin</artifactId>
-                            <version>${mosip-identity-certify-plugin.version}</version>
-                            <outputDirectory>${certify-plugins.location}</outputDirectory>
-                            <destFileName>${mosip-identity-certify-plugin.fileName}</destFileName>
-                            <type>jar</type>
-                        </artifactItem>
-                        <artifactItem>
-                            <groupId>io.mosip.certify</groupId>
-                            <artifactId>postgres-dataprovider-plugin</artifactId>
-                            <version>${postgres-dataprovider-plugin.version}</version>
-                            <outputDirectory>${certify-plugins.location}</outputDirectory>
-                            <destFileName>${postgres-dataprovider-plugin.fileName}</destFileName>
-                            <type>jar</type>
-                        </artifactItem>
-                        <artifactItem>
-                            <groupId>io.inji.certify.sunbirdrc</groupId>
-                            <artifactId>sunbird-rc-certify-integration-impl</artifactId>
-                            <version>${sunbird-rc-certify-integration-plugin.version}</version>
-                            <outputDirectory>${certify-plugins.location}</outputDirectory>
-                            <destFileName>${sunbird-rc-certify-integration-plugin.fileName}</destFileName>
-                            <type>jar</type>
-                        </artifactItem>
-                    </artifactItems>
-                    <overWriteReleases>true</overWriteReleases>
-                    <overWriteSnapshots>true</overWriteSnapshots>
-                    <overWriteIfNewer>true</overWriteIfNewer>
-                </configuration>
             </plugin>
+
+
+            <!-- =========================================================
+                 Maven Antrun Plugin
+
+                 Copies the LOCAL Sunbird RC JAR that is stored in the
+                 same directory as this pom.xml.
+
+                 Source:
+                 sunbird-rc-certify-integration-impl-0.5.0.jar
+
+                 Destination:
+                 target/sunbird-rc-certify-integration-impl.jar
+                 ========================================================= -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-antrun-plugin</artifactId>
+                <version>3.1.0</version>
+
+                <executions>
+                    <execution>
+                        <id>copy-local-sunbird-rc-plugin</id>
+                        <phase>package</phase>
+
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+
+                        <configuration>
+                            <target>
+
+                                <copy
+                                    file="${project.basedir}/sunbird-rc-certify-integration-impl-0.5.0.jar"
+                                    tofile="${project.build.directory}/sunbird-rc-certify-integration-impl.jar"
+                                    overwrite="true" />
+
+                            </target>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
+
+            <!-- =========================================================
+                 Git Commit ID Plugin
+                 ========================================================= -->
             <plugin>
                 <groupId>pl.project13.maven</groupId>
                 <artifactId>git-commit-id-plugin</artifactId>
                 <version>3.0.1</version>
+
                 <executions>
                     <execution>
                         <id>get-the-git-infos</id>
+
                         <goals>
                             <goal>revision</goal>
                         </goals>
+
                         <phase>validate</phase>
                     </execution>
                 </executions>
+
                 <configuration>
                     <generateGitPropertiesFile>true</generateGitPropertiesFile>
-                    <generateGitPropertiesFilename>${project.build.outputDirectory}/git.properties</generateGitPropertiesFilename>
+
+                    <generateGitPropertiesFilename>
+                        ${project.build.outputDirectory}/git.properties
+                    </generateGitPropertiesFilename>
+
                     <includeOnlyProperties>
-                        <includeOnlyProperty>^git.build.(time|version)$</includeOnlyProperty>
-                        <includeOnlyProperty>^git.commit.id.(abbrev|full)$</includeOnlyProperty>
+
+                        <includeOnlyProperty>
+                            ^git.build.(time|version)$
+                        </includeOnlyProperty>
+
+                        <includeOnlyProperty>
+                            ^git.commit.id.(abbrev|full)$
+                        </includeOnlyProperty>
+
                     </includeOnlyProperties>
+
                     <commitIdGenerationMode>full</commitIdGenerationMode>
-                    <dotGitDirectory>${project.basedir}/.git</dotGitDirectory>
+
+                    <dotGitDirectory>
+                        ${project.basedir}/.git
+                    </dotGitDirectory>
+
                     <format>json</format>
                 </configuration>
             </plugin>
+
+
+            <!-- =========================================================
+                 GPG Plugin
+                 ========================================================= -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-gpg-plugin</artifactId>
                 <version>1.5</version>
+
                 <executions>
                     <execution>
                         <id>sign-artifacts</id>
+
                         <phase>verify</phase>
+
                         <goals>
                             <goal>sign</goal>
                         </goals>
+
                         <configuration>
                             <gpgArguments>
                                 <arg>--pinentry-mode</arg>
@@ -146,26 +235,7 @@
                     </execution>
                 </executions>
             </plugin>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-gpg-plugin</artifactId>
-                <version>1.5</version>
-                <executions>
-                    <execution>
-                        <id>sign-artifacts</id>
-                        <phase>verify</phase>
-                        <goals>
-                            <goal>sign</goal>
-                        </goals>
-                        <configuration>
-                            <gpgArguments>
-                                <arg>--pinentry-mode</arg>
-                                <arg>loopback</arg>
-                            </gpgArguments>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
+
         </plugins>
     </build>
 
