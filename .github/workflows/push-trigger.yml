@@ -42,7 +42,7 @@ jobs:
       is_condition: ${{ steps.check_output.outputs.is_condition }}
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Check for -SNAPSHOT version in pom.xml files
         id: check_output
@@ -51,45 +51,43 @@ jobs:
           # Initialize the flag that will hold the result
           condition_met=false
           echo "Initial condition_met: $condition_met"
-          
+
           # Loop through each pom.xml file and check if -SNAPSHOT version is present in the parent block
           for pom_file in $(find . -name "pom.xml"); do
             echo "Processing $pom_file"
-          
+
             # Extract the <parent> block from the pom.xml
-            parent_block=$(awk '/<parent>/,/<\/parent>/' "$pom_file")
-          
+            parent_block=$(awk '/<parent>/,/<\/parent>/' "$pom_file" || true)
+
             # If there's no <parent> block, skip this file and move to the next one
             if [ -z "$parent_block" ]; then
               echo "No <parent> block found in $pom_file, skipping this file."
               continue
             fi
-          
-            # Debug: Print the entire parent block for verification
+
             echo "Checking the following parent block in $pom_file:"
             echo "$parent_block"
-          
-            # Extract the <version> field from the <parent> block
-            version_in_parent=$(echo "$parent_block" | grep -oP '<version>\K.*(?=</version>)')
-          
-            # Debug the extracted version
+
+            # Extract the <version> field from the <parent> block.
+            # '|| true' prevents the step from failing (bash runs with -e -o pipefail)
+            # when grep finds no match.
+            version_in_parent=$(echo "$parent_block" | grep -oP '<version>\K.*?(?=</version>)' | head -n 1 || true)
+
             echo "Extracted version in $pom_file: $version_in_parent"
-          
-            # Check if the version contains '-SNAPSHOT'
+
             if [[ "$version_in_parent" == *"-SNAPSHOT"* ]]; then
               echo "Found '-SNAPSHOT' version in $pom_file."
               condition_met=true
-              break # Stop checking further files once we find '-SNAPSHOT'
+              break
             else
               echo "No '-SNAPSHOT' version found in $pom_file."
             fi
           done
-          
-          # Debug the final condition_met value
+
           echo "Final condition_met value: $condition_met"
-          
-          # Set the output for the next step
-          echo "::set-output name=is_condition::$condition_met"
+
+          # ::set-output is deprecated; write to GITHUB_OUTPUT instead
+          echo "is_condition=$condition_met" >> "$GITHUB_OUTPUT"
 
       - name: Debug Condition Output
         run: |
@@ -145,9 +143,12 @@ jobs:
       GPG_SECRET: ${{ secrets.GPG_SECRET }}
       SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
 
-# Removing publish_to_nexus for now from the list until migration to central nexus is done.
+  # Runs unconditionally on every trigger. 'needs' is kept only so this job starts
+  # after the plugins Maven build has finished and uploaded its artifact;
+  # always() means the job runs whatever the result of that build.
   build-docker-inji-certify-with-plugins:
-    needs: [ maven-build-inji-certify-with-plugins, check_snapshot_version, publish_to_nexus ]
+    needs: [ maven-build-inji-certify-with-plugins ]
+    if: ${{ always() }}
     strategy:
       matrix:
         include:
@@ -276,4 +277,3 @@ jobs:
       ACTOR_DOCKER_HUB: ${{ secrets.ACTOR_DOCKER_HUB }}
       RELEASE_DOCKER_HUB: ${{ secrets.RELEASE_DOCKER_HUB }}
       SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
-
