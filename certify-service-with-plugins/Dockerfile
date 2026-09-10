@@ -1,4 +1,4 @@
-FROM dharanidharan0411/inji-certify:jwt
+FROM dharanidharan0411/inji-certify:karthik
 
 ARG SOURCE
 ARG COMMIT_HASH
