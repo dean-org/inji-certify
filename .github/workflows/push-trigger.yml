@@ -21,6 +21,7 @@ on:
       - MOSIP*
       - release*
       - INJICERT-*
+      - karthik
 
 jobs:
   build-maven-inji-certify:
