@@ -125,24 +125,72 @@ public class CertifyIssuanceServiceImpl implements VCIssuanceService {
 
     @Override
     public CredentialResponse getCredential(CredentialRequest credentialRequest) {
+
+                log.info("========== CERTIFY DEBUG: GET CREDENTIAL ==========");
+                log.info("Credential request received");
+                log.info("Credential format: {}", credentialRequest.getFormat());
+            
+                if (credentialRequest.getProof() != null) {
+                    log.info("Proof type: {}", credentialRequest.getProof().getProof_type());
+                    log.info("Proof JWT present: {}", credentialRequest.getProof().getJwt() != null);
+                } else {
+                    log.warn("Credential proof is NULL");
+                }
+            
+                if (credentialRequest.getCredential_definition() != null) {
+                    log.info("Credential definition type: {}",
+                            credentialRequest.getCredential_definition().getType());
+            
+                    log.info("Credential definition context: {}",
+                            credentialRequest.getCredential_definition().getContext());
+            
+                    log.info("Credential subject requested: {}",
+                            credentialRequest.getCredential_definition().getCredentialSubject());
+                }
+            
+                log.info("====================================================");
+        
         // 1. Credential Request validation
         boolean isValidCredentialRequest = CredentialRequestValidator.isValid(credentialRequest);
         if(!isValidCredentialRequest) {
             throw new InvalidRequestException(ErrorConstants.INVALID_REQUEST);
         }
 
-        if(!parsedAccessToken.isActive())
+        if(!parsedAccessToken.isActive()){
+            log.error("CERTIFY DEBUG: Access token is NOT ACTIVE");
             throw new NotAuthenticatedException();
+        }
+        
+        log.info("========== CERTIFY DEBUG: ACCESS TOKEN ==========");
+        log.info("Access token is active: {}", parsedAccessToken.isActive());
+        log.info("Access token claims: {}", parsedAccessToken.getClaims());
+        log.info("Access token subject (sub): {}", parsedAccessToken.getClaims().get("sub"));
+        log.info("Access token scope: {}", parsedAccessToken.getClaims().get("scope"));
+        log.info("Access token client_id: {}", parsedAccessToken.getClaims().get("client_id"));
+        log.info("Access token issuer (iss): {}", parsedAccessToken.getClaims().get("iss"));
+        log.info("Access token audience (aud): {}", parsedAccessToken.getClaims().get("aud"));
+        log.info("=================================================");
+        
         // 2. Scope Validation
         String scopeClaim = (String) parsedAccessToken.getClaims().getOrDefault("scope", "");
+
+        log.info("========== CERTIFY DEBUG: SCOPE ==========");
+        log.info("Raw scope claim: [{}]", scopeClaim);
+        log.info("Credential request format: [{}]", credentialRequest.getFormat());
+        
         CredentialMetadata credentialMetadata = null;
         for(String scope : scopeClaim.split(Constants.SPACE)) {
+            log.info("Checking scope: [{}]", scope);
             Optional<CredentialMetadata> result = getScopeCredentialMapping(scope, credentialRequest.getFormat(), credentialConfigurationService.fetchCredentialIssuerMetadata("latest"), credentialRequest);
+            log.info("Scope [{}] mapping found: {}", scope, result.isPresent());
             if(result.isPresent()) {
                 credentialMetadata = result.get(); //considering only first credential scope
+                log.info("Credential metadata selected for scope [{}]: {}", scope, credentialMetadata);
                 break;
             }
         }
+        log.info("Final credential metadata: {}", credentialMetadata);
+        log.info("============================================");
 
         if(credentialMetadata == null) {
             log.error("No credential mapping found for the provided scope {}", scopeClaim);
@@ -174,13 +222,48 @@ public class CertifyIssuanceServiceImpl implements VCIssuanceService {
     }
 
     private VCResult<?> getVerifiableCredential(CredentialRequest credentialRequest, CredentialMetadata credentialMetadata, String holderId) {
+        
+        log.info("========== CERTIFY DEBUG: VERIFIABLE CREDENTIAL ==========");
+        log.info("Holder ID from proof: [{}]", holderId);
+        log.info("Credential format: [{}]", credentialRequest.getFormat());
+        log.info("Credential metadata: {}", credentialMetadata);
+        log.info("Access token subject: [{}]",
+                parsedAccessToken.getClaims().get("sub"));
+        log.info("Access token scope: [{}]",
+                parsedAccessToken.getClaims().get("scope"));
+        log.info("===========================================================");
+        
         parsedAccessToken.getClaims().put("accessTokenHash", parsedAccessToken.getAccessTokenHash());
         VCRequestDto vcRequestDto = new VCRequestDto();
         vcRequestDto.setFormat(credentialRequest.getFormat());
 
         try {
             // Fetch data once, as it's common to all formats
+
+             log.info("========== CERTIFY DEBUG: DATA PROVIDER ==========");
+            log.info("DataProvider implementation: {}",
+                    dataProviderPlugin.getClass().getName());
+        
+            log.info("Claims being passed to DataProvider: {}",
+                    parsedAccessToken.getClaims());
+        
+            log.info("SUB passed to DataProvider: [{}]",
+                    parsedAccessToken.getClaims().get("sub"));
+        
+            log.info("SCOPE passed to DataProvider: [{}]",
+                    parsedAccessToken.getClaims().get("scope"));
+        
+            log.info("CLIENT_ID passed to DataProvider: [{}]",
+                    parsedAccessToken.getClaims().get("client_id"));
+        
+            log.info("===================================================");
+
             JSONObject jsonObject = dataProviderPlugin.fetchData(parsedAccessToken.getClaims());
+
+            log.info("========== CERTIFY DEBUG: DATA PROVIDER SUCCESS ==========");
+            log.info("Identity data successfully fetched");
+            log.info("Identity data keys: {}", jsonObject.keySet());
+            log.info("==========================================================");
 
             String templateName;
             Map<String, Object> templateParams = new HashMap<>();
@@ -263,6 +346,23 @@ public class CertifyIssuanceServiceImpl implements VCIssuanceService {
             return result;
 
         } catch (DataProviderExchangeException e) {
+
+             log.error("========== CERTIFY DEBUG: DATA PROVIDER FAILED ==========");
+            log.error("DataProvider error code: {}", e.getErrorCode());
+            log.error("DataProvider exception message: {}", e.getMessage());
+        
+            log.error("SUB used for identity lookup: [{}]",
+                    parsedAccessToken.getClaims().get("sub"));
+        
+            log.error("SCOPE from access token: [{}]",
+                    parsedAccessToken.getClaims().get("scope"));
+        
+            log.error("Full claims used for DataProvider: {}",
+                    parsedAccessToken.getClaims());
+        
+            log.error("===========================================================",
+                    e);
+            
             throw new CertifyException(e.getErrorCode());
         } catch (JSONException e) {
             log.error(e.getMessage(), e);
