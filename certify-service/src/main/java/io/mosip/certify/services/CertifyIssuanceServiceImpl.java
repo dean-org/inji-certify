@@ -180,6 +180,7 @@ public class CertifyIssuanceServiceImpl implements VCIssuanceService {
 
         try {
             // Fetch data once, as it's common to all formats
+            log.info("Parsed access token claims: {}", parsedAccessToken.getClaims());
             JSONObject jsonObject = dataProviderPlugin.fetchData(parsedAccessToken.getClaims());
 
             String templateName;
