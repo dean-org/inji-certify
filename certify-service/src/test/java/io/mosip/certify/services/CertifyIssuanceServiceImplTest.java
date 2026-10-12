@@ -441,7 +441,7 @@ public class CertifyIssuanceServiceImplTest {
                 anyString(),
                 anyString(),
                 anyString()
-        )).thenReturn(mockVcResultLdp);
+        )).thenAnswer(invocation -> mockVcResultLdp);
 
         CredentialResponse<?> response = issuanceService.getCredential(request);
 
@@ -695,7 +695,7 @@ public class CertifyIssuanceServiceImplTest {
                 anyString(),
                 anyString(),
                 anyString()
-        )).thenReturn(mockVcResultSdJwt);
+        )).thenAnswer(invocation -> mockVcResultSdJwt);
 
         CredentialResponse<?> response = issuanceService.getCredential(request);
 
@@ -757,7 +757,7 @@ public class CertifyIssuanceServiceImplTest {
                 anyString(),
                 anyString(),
                 anyString()
-        )).thenReturn(mockVcResultLdp);
+        )).thenAnswer(invocation -> mockVcResultLdp);
 
         CredentialResponse<?> response = issuanceService.getCredential(request);
 
@@ -823,7 +823,7 @@ public class CertifyIssuanceServiceImplTest {
                 anyString(),
                 anyString(),
                 anyString()
-        )).thenReturn(mockVcResultLdp);
+        )).thenAnswer(invocation -> mockVcResultLdp);
 
         CredentialResponse<?> response = issuanceService.getCredential(request);
 
@@ -986,7 +986,7 @@ public class CertifyIssuanceServiceImplTest {
                 anyString(),
                 anyString(),
                 anyString()
-        )).thenReturn(mockVcResultLdp);
+        )).thenAnswer(invocation -> mockVcResultLdp);
 
         CredentialResponse<?> response = issuanceService.getCredential(request);
 
@@ -1056,7 +1056,7 @@ public class CertifyIssuanceServiceImplTest {
                 anyString(),
                 anyString(),
                 anyString()
-        )).thenReturn(mockVcResultLdp);
+        )).thenAnswer(invocation -> mockVcResultLdp);
 
         CredentialResponse<?> response = issuanceService.getCredential(request);
 
