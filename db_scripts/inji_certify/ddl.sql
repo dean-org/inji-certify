@@ -12,3 +12,4 @@
 \ir ddl/certify-status_list_available_indices.sql
 \ir ddl/certify-shedlock.sql
 \ir ddl/certify-iar_session.sql
+\ir ddl/certify-vc_vault.sql

@@ -8,6 +8,7 @@ package io.mosip.certify.services;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import io.mosip.certify.api.dto.VCRequestDto;
 import io.mosip.certify.api.dto.VCResult;
+import io.mosip.certify.vault.CredentialVaultService;
 import io.mosip.certify.api.exception.DataProviderExchangeException;
 import io.mosip.certify.api.spi.AuditPlugin;
 import io.mosip.certify.api.spi.DataProviderPlugin;
@@ -100,6 +101,9 @@ public class CertifyIssuanceServiceImpl implements VCIssuanceService {
 
     @Autowired
     private PixelPass pixelPass;
+
+    @Autowired
+    private CredentialVaultService credentialVaultService;
 
     private Map<String, Object> didDocument;
 
@@ -250,8 +254,13 @@ public class CertifyIssuanceServiceImpl implements VCIssuanceService {
             }
             jsonObject.put("_holderId", holderId);
             templateParams.putAll(jsonObject.toMap());
+            // With the vault enabled the credential id is a short claim code the holder can type
+            // (e.g. K7QM-2XPD-9TVR); otherwise the usual random UUID.
+            String issuedCredentialId = credentialVaultService.isEnabled()
+                    ? credentialVaultService.newCredentialId()
+                    : UUID.randomUUID().toString();
             if(!StringUtils.isEmpty(idPrefix)) {
-                templateParams.put(VCDMConstants.CREDENTIAL_ID, idPrefix + UUID.randomUUID());
+                templateParams.put(VCDMConstants.CREDENTIAL_ID, idPrefix + issuedCredentialId);
             }
             ZonedDateTime zonedDateTime = ZonedDateTime.now(ZoneOffset.UTC);
             // current time
@@ -300,6 +309,13 @@ public class CertifyIssuanceServiceImpl implements VCIssuanceService {
                 log.info("Successfully stored the credential issuance data in ledger with credentialType: {}", credentialType);
             }
             VCResult<?> result = cred.addProof(unsignedCredential, "", vcFormatter.getProofAlgorithm(templateName), vcFormatter.getAppID(templateName), vcFormatter.getRefID(templateName), vcFormatter.getDidUrl(templateName), vcFormatter.getSignatureCryptoSuite(templateName));
+
+            if (credentialVaultService.isEnabled()) {
+                List<String> vaultTypes = "ldp_vc".equals(format)
+                        ? credentialRequest.getCredential_definition().getType()
+                        : credentialMetadata.getTypes();
+                credentialVaultService.store(issuedCredentialId, result, credentialMetadata.getId(), vaultTypes, jsonObject, didUrl, holderId);
+            }
 
             jsonObject.remove(VCDM2Constants.CREDENTIAL_STATUS);
             return result;
