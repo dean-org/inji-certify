@@ -893,7 +893,7 @@ public class CertifyIssuanceServiceImplTest {
                     anyString(),
                     anyString(),
                     anyString()
-            )).thenReturn(mockVcResultMdoc);
+            )).thenAnswer(invocation -> mockVcResultMdoc);
 
             CredentialResponse<?> response = issuanceService.getCredential(request);
 
