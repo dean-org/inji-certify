@@ -509,6 +509,16 @@ public class CertifyIssuanceServiceImplTest {
         when(proofValidatorFactory.getProofValidator(anyString()))
                 .thenReturn(proofValidator);
 
+           // Allow proof validation to pass so the data provider is called.
+        when(proofValidator.getKeyMaterial(any(CredentialProof.class)))
+                .thenReturn("");
+        when(proofValidator.validate(
+                anyString(),
+                anyString(),
+                any(CredentialProof.class),
+                any()
+        )).thenReturn(true);
+
         DataProviderExchangeException exception =
                 new DataProviderExchangeException(
                         "DP_FETCH_FAILED",
@@ -522,6 +532,8 @@ public class CertifyIssuanceServiceImplTest {
                 () -> issuanceService.getCredential(request)
         );
         assertEquals("DP_FETCH_FAILED", ex.getErrorCode());
+
+        verify(dataProviderPlugin).fetchData(claimsFromAccessToken);
     }
 
     @Test
