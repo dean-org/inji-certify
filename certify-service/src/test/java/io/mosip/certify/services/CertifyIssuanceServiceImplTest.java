@@ -1,7 +1,6 @@
 package io.mosip.certify.services;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nimbusds.jose.*;
 import com.nimbusds.jose.crypto.RSASSASigner;
 import com.nimbusds.jose.jwk.RSAKey;
@@ -35,6 +34,7 @@ import io.mosip.certify.proof.ProofValidator;
 import io.mosip.certify.proof.ProofValidatorFactory;
 import io.mosip.certify.utils.LedgerUtils;
 import io.mosip.certify.validators.CredentialRequestValidator;
+import io.mosip.certify.vault.CredentialVaultService;
 import io.mosip.certify.vcformatters.VCFormatter;
 import io.mosip.pixelpass.PixelPass;
 import org.json.JSONArray;
@@ -65,29 +65,40 @@ public class CertifyIssuanceServiceImplTest {
 
     @Mock
     private ParsedAccessToken parsedAccessToken;
+
     @Mock
     private VCFormatter vcFormatter;
+
     @Mock
     private DataProviderPlugin dataProviderPlugin;
+
     @Mock
     private ProofValidatorFactory proofValidatorFactory;
+
     @Mock
     private VCICacheService vciCacheService;
+
     @Mock
     private SecurityHelperService securityHelperService;
+
     @Mock
     private AuditPlugin auditWrapper;
+
     @Mock
     private ProofValidator proofValidator;
 
     @Mock
     private CredentialFactory credentialFactory;
+
     @Mock
     private CredentialConfigurationService credentialConfigurationService;
+
     @Mock
     private LedgerUtils ledgerUtils;
+
     @Mock
     private StatusListCredentialService statusListCredentialService;
+
     @Mock
     private CredentialLedgerService credentialLedgerService;
 
@@ -97,52 +108,98 @@ public class CertifyIssuanceServiceImplTest {
     @Mock
     private VelocityEnvConfig velocityEnvConfig;
 
+    // Fix: Mock the credential vault dependency used by the issuance service.
+    @Mock
+    private CredentialVaultService credentialVaultService;
+
     @InjectMocks
     private CertifyIssuanceServiceImpl issuanceService;
 
     private static final String TEST_ACCESS_TOKEN_HASH = "test-token-hash";
     private static final String TEST_CNONCE = "test-cnonce";
     private static final String DEFAULT_SCOPE = "test-scope";
+
     private static final String DEFAULT_FORMAT_LDP = VCFormats.LDP_VC;
-    private static final String DEFAULT_FORMAT_SDJWT = VCFormats.VC_SD_JWT; // vc+sd-jwt
-    private static final String DEFAULT_FORMAT_MDOC = VCFormats.MSO_MDOC; // mso_mdoc
+    private static final String DEFAULT_FORMAT_SDJWT = VCFormats.VC_SD_JWT;
+    private static final String DEFAULT_FORMAT_MDOC = VCFormats.MSO_MDOC;
 
     CredentialRequest request;
-    Map<String, Object> claimsFromAccessToken; // Renamed for clarity
+    Map<String, Object> claimsFromAccessToken;
     VCIssuanceTransaction transaction;
     CredentialIssuerMetadataVD13DTO mockGlobalCredentialIssuerMetadataDTO;
-
 
     @Before
     public void setUp() throws JsonProcessingException {
         testIssuerMetadataMap = new LinkedHashMap<>();
+
         LinkedHashMap<String, Object> latestMetadataConfig = new LinkedHashMap<>();
-        LinkedHashMap<String, Object> credentialConfigurationsSupportedMapForTestMeta = new LinkedHashMap<>();
+        LinkedHashMap<String, Object> credentialConfigurationsSupportedMapForTestMeta =
+                new LinkedHashMap<>();
         LinkedHashMap<String, Object> vcConfigForTestMeta = new LinkedHashMap<>();
+
         vcConfigForTestMeta.put("format", DEFAULT_FORMAT_LDP);
         vcConfigForTestMeta.put("scope", DEFAULT_SCOPE);
-        // ... (rest of the population for testIssuerMetadataMap as before)
-        LinkedHashMap<String, Object> credDefMapForTestMeta = new LinkedHashMap<>();
-        credDefMapForTestMeta.put("type", Arrays.asList("VerifiableCredential", "TestCredential"));
-        vcConfigForTestMeta.put("credential_definition", credDefMapForTestMeta);
-        credentialConfigurationsSupportedMapForTestMeta.put("test-credential-id", vcConfigForTestMeta);
-        latestMetadataConfig.put("credential_configurations_supported", credentialConfigurationsSupportedMapForTestMeta);
-        latestMetadataConfig.put("credential_issuer", "https://localhost:9090");
-        latestMetadataConfig.put("credential_endpoint", "https://localhost:9090/v1/certify/issuance/credential");
-        testIssuerMetadataMap.put("latest", latestMetadataConfig);
 
+        LinkedHashMap<String, Object> credDefMapForTestMeta = new LinkedHashMap<>();
+        credDefMapForTestMeta.put(
+                "type",
+                Arrays.asList("VerifiableCredential", "TestCredential")
+        );
+
+        vcConfigForTestMeta.put("credential_definition", credDefMapForTestMeta);
+        credentialConfigurationsSupportedMapForTestMeta.put(
+                "test-credential-id",
+                vcConfigForTestMeta
+        );
+
+        latestMetadataConfig.put(
+                "credential_configurations_supported",
+                credentialConfigurationsSupportedMapForTestMeta
+        );
+        latestMetadataConfig.put("credential_issuer", "https://localhost:9090");
+        latestMetadataConfig.put(
+                "credential_endpoint",
+                "https://localhost:9090/v1/certify/issuance/credential"
+        );
+
+        testIssuerMetadataMap.put("latest", latestMetadataConfig);
 
         ReflectionTestUtils.setField(issuanceService, "cNonceExpireSeconds", 300);
         ReflectionTestUtils.setField(issuanceService, "didUrl", "https://test.issuer.com");
         ReflectionTestUtils.setField(issuanceService, "domainUrl", "did:example:ldp");
         ReflectionTestUtils.setField(issuanceService, "ledgerUtils", ledgerUtils);
-        ReflectionTestUtils.setField(issuanceService, "statusListCredentialService", statusListCredentialService);
-        ReflectionTestUtils.setField(issuanceService, "credentialLedgerService", credentialLedgerService);
-        ReflectionTestUtils.setField(issuanceService, "defaultExpiryDuration", "P730D");
+        ReflectionTestUtils.setField(
+                issuanceService,
+                "statusListCredentialService",
+                statusListCredentialService
+        );
+        ReflectionTestUtils.setField(
+                issuanceService,
+                "credentialLedgerService",
+                credentialLedgerService
+        );
+        ReflectionTestUtils.setField(
+                issuanceService,
+                "credentialVaultService",
+                credentialVaultService
+        );
+        ReflectionTestUtils.setField(
+                issuanceService,
+                "defaultExpiryDuration",
+                "P730D"
+        );
         ReflectionTestUtils.setField(issuanceService, "pixelPass", pixelPass);
-        ReflectionTestUtils.setField(issuanceService, "velocityEnvConfig", velocityEnvConfig);
+        ReflectionTestUtils.setField(
+                issuanceService,
+                "velocityEnvConfig",
+                velocityEnvConfig
+        );
 
-        when(parsedAccessToken.getAccessTokenHash()).thenReturn(TEST_ACCESS_TOKEN_HASH);
+        // Default behavior: vault disabled for ordinary issuance tests.
+        when(credentialVaultService.isEnabled()).thenReturn(false);
+
+        when(parsedAccessToken.getAccessTokenHash())
+                .thenReturn(TEST_ACCESS_TOKEN_HASH);
 
         claimsFromAccessToken = new HashMap<>();
         claimsFromAccessToken.put("scope", DEFAULT_SCOPE);
@@ -152,61 +209,105 @@ public class CertifyIssuanceServiceImplTest {
         transaction = new VCIssuanceTransaction();
         transaction.setCNonce(TEST_CNONCE);
         transaction.setCNonceExpireSeconds(300);
-        transaction.setCNonceIssuedEpoch(LocalDateTime.now(ZoneOffset.UTC).toEpochSecond(ZoneOffset.UTC));
-
+        transaction.setCNonceIssuedEpoch(
+                LocalDateTime.now(ZoneOffset.UTC).toEpochSecond(ZoneOffset.UTC)
+        );
 
         mockGlobalCredentialIssuerMetadataDTO = new CredentialIssuerMetadataVD13DTO();
-        mockGlobalCredentialIssuerMetadataDTO.setCredentialIssuer("https://test.issuer.com");
-        mockGlobalCredentialIssuerMetadataDTO.setAuthorizationServers(List.of("https://auth.server.com"));
-        mockGlobalCredentialIssuerMetadataDTO.setCredentialEndpoint("https://test.issuer.com/credentials");
+        mockGlobalCredentialIssuerMetadataDTO.setCredentialIssuer(
+                "https://test.issuer.com"
+        );
+        mockGlobalCredentialIssuerMetadataDTO.setAuthorizationServers(
+                List.of("https://auth.server.com")
+        );
+        mockGlobalCredentialIssuerMetadataDTO.setCredentialEndpoint(
+                "https://test.issuer.com/credentials"
+        );
 
-        Map<String, CredentialConfigurationSupportedDTO> supportedCredsMap = new HashMap<>();
+        Map<String, CredentialConfigurationSupportedDTO> supportedCredsMap =
+                new HashMap<>();
 
-        // LDP Config DTO
-        CredentialConfigurationSupportedDTO supportedDTO_LDP = new CredentialConfigurationSupportedDTO();
+        // LDP configuration
+        CredentialConfigurationSupportedDTO supportedDTO_LDP =
+                new CredentialConfigurationSupportedDTO();
         supportedDTO_LDP.setScope(DEFAULT_SCOPE);
         supportedDTO_LDP.setFormat(DEFAULT_FORMAT_LDP);
-        CredentialDefinition credDefDtoForLDP = new CredentialDefinition(); // Using your DTO structure
-        credDefDtoForLDP.setContext(List.of("https://www.w3.org/2018/credentials/v1"));
-        credDefDtoForLDP.setType(List.of("VerifiableCredential", "TestCredential"));
+
+        CredentialDefinition credDefDtoForLDP = new CredentialDefinition();
+        credDefDtoForLDP.setContext(
+                List.of("https://www.w3.org/2018/credentials/v1")
+        );
+        credDefDtoForLDP.setType(
+                List.of("VerifiableCredential", "TestCredential")
+        );
         supportedDTO_LDP.setCredentialDefinition(credDefDtoForLDP);
         supportedCredsMap.put("test-credential-id-ldp", supportedDTO_LDP);
 
-        CredentialConfigurationSupportedDTO supportedDTO_LDP_DM2_0 = new CredentialConfigurationSupportedDTO();
+        // LDP configuration using the VCDM 2.0 context
+        CredentialConfigurationSupportedDTO supportedDTO_LDP_DM2_0 =
+                new CredentialConfigurationSupportedDTO();
         supportedDTO_LDP_DM2_0.setScope(DEFAULT_SCOPE);
         supportedDTO_LDP_DM2_0.setFormat(DEFAULT_FORMAT_LDP);
-        CredentialDefinition credDefDtoForLDP_DM2_0 = new CredentialDefinition(); // Using your DTO structure
-        credDefDtoForLDP_DM2_0.setContext(List.of("https://www.w3.org/ns/credentials/v2"));
-        credDefDtoForLDP_DM2_0.setType(List.of("VerifiableCredential", "TestCredential"));
-        supportedDTO_LDP_DM2_0.setCredentialDefinition(credDefDtoForLDP_DM2_0);
-        supportedCredsMap.put("test-credential-id-ldp-dm-2.0", supportedDTO_LDP_DM2_0);
 
-        // SD-JWT Config DTO
-        CredentialConfigurationSupportedDTO supportedDTO_SDJWT = new CredentialConfigurationSupportedDTO();
+        CredentialDefinition credDefDtoForLDP_DM2_0 = new CredentialDefinition();
+        credDefDtoForLDP_DM2_0.setContext(
+                List.of("https://www.w3.org/ns/credentials/v2")
+        );
+        credDefDtoForLDP_DM2_0.setType(
+                List.of("VerifiableCredential", "TestCredential")
+        );
+        supportedDTO_LDP_DM2_0.setCredentialDefinition(credDefDtoForLDP_DM2_0);
+        supportedCredsMap.put(
+                "test-credential-id-ldp-dm-2.0",
+                supportedDTO_LDP_DM2_0
+        );
+
+        // SD-JWT configuration
+        CredentialConfigurationSupportedDTO supportedDTO_SDJWT =
+                new CredentialConfigurationSupportedDTO();
         supportedDTO_SDJWT.setScope(DEFAULT_SCOPE);
         supportedDTO_SDJWT.setFormat(DEFAULT_FORMAT_SDJWT);
         supportedDTO_SDJWT.setVct("test_vct");
-        CredentialDefinition credDefDtoForSDJWT = new CredentialDefinition(); // Using your DTO structure
-        credDefDtoForSDJWT.setContext(List.of("https://www.w3.org/2018/credentials/v1", "https://example.org/sd-jwt/v1"));
-        credDefDtoForSDJWT.setType(List.of("VerifiableCredential", "TestCredential", "SDJWTCredential"));
+
+        CredentialDefinition credDefDtoForSDJWT = new CredentialDefinition();
+        credDefDtoForSDJWT.setContext(
+                List.of(
+                        "https://www.w3.org/2018/credentials/v1",
+                        "https://example.org/sd-jwt/v1"
+                )
+        );
+        credDefDtoForSDJWT.setType(
+                List.of(
+                        "VerifiableCredential",
+                        "TestCredential",
+                        "SDJWTCredential"
+                )
+        );
         supportedDTO_SDJWT.setCredentialDefinition(credDefDtoForSDJWT);
         supportedCredsMap.put("test-credential-id-sdjwt", supportedDTO_SDJWT);
 
-        // MSO_MDOC Config DTO
-        CredentialConfigurationSupportedDTO supportedDTO_MDOC = new CredentialConfigurationSupportedDTO();
-        supportedDTO_MDOC.setScope(DEFAULT_SCOPE); // IMPORTANT: Must match claimsFromAccessToken
+        // mDOC configuration
+        CredentialConfigurationSupportedDTO supportedDTO_MDOC =
+                new CredentialConfigurationSupportedDTO();
+        supportedDTO_MDOC.setScope(DEFAULT_SCOPE);
         supportedDTO_MDOC.setFormat(DEFAULT_FORMAT_MDOC);
         supportedDTO_MDOC.setDocType("org.iso.18013.5.1.mDL");
+
         CredentialDefinition credDefDtoForMDOC = new CredentialDefinition();
-        credDefDtoForMDOC.setContext(List.of("https://www.w3.org/2018/credentials/v1"));
-        credDefDtoForMDOC.setType(List.of("VerifiableCredential", "mDLCredential"));
+        credDefDtoForMDOC.setContext(
+                List.of("https://www.w3.org/2018/credentials/v1")
+        );
+        credDefDtoForMDOC.setType(
+                List.of("VerifiableCredential", "mDLCredential")
+        );
         supportedDTO_MDOC.setCredentialDefinition(credDefDtoForMDOC);
         supportedCredsMap.put("test-credential-id-mdoc", supportedDTO_MDOC);
 
-        mockGlobalCredentialIssuerMetadataDTO.setCredentialConfigurationSupportedDTO(supportedCredsMap);
+        mockGlobalCredentialIssuerMetadataDTO
+                .setCredentialConfigurationSupportedDTO(supportedCredsMap);
 
         when(credentialConfigurationService.fetchCredentialIssuerMetadata("latest"))
-                .thenReturn(mockGlobalCredentialIssuerMetadataDTO); // Default mock
+                .thenReturn(mockGlobalCredentialIssuerMetadataDTO);
     }
 
     private CredentialRequest createValidCredentialRequest(String format) {
@@ -214,86 +315,127 @@ public class CertifyIssuanceServiceImplTest {
         req.setFormat(format);
         req.setVct("test_vct");
 
-        // This is io.mosip.certify.core.dto.CredentialDefinition for the request object
-        io.mosip.certify.core.dto.CredentialDefinition requestCredDef = new io.mosip.certify.core.dto.CredentialDefinition();
+        io.mosip.certify.core.dto.CredentialDefinition requestCredDef =
+                new io.mosip.certify.core.dto.CredentialDefinition();
+
         if (DEFAULT_FORMAT_SDJWT.equals(format)) {
-            requestCredDef.setContext(List.of("https://www.w3.org/2018/credentials/v1", "https://example.org/sd-jwt/v1"));
-            requestCredDef.setType(List.of("VerifiableCredential", "TestCredential", "SDJWTCredential"));
-        } else { // LDP
-            requestCredDef.setContext(List.of("https://www.w3.org/2018/credentials/v1"));
-            requestCredDef.setType(List.of("VerifiableCredential", "TestCredential"));
+            requestCredDef.setContext(
+                    List.of(
+                            "https://www.w3.org/2018/credentials/v1",
+                            "https://example.org/sd-jwt/v1"
+                    )
+            );
+            requestCredDef.setType(
+                    List.of(
+                            "VerifiableCredential",
+                            "TestCredential",
+                            "SDJWTCredential"
+                    )
+            );
+        } else {
+            requestCredDef.setContext(
+                    List.of("https://www.w3.org/2018/credentials/v1")
+            );
+            requestCredDef.setType(
+                    List.of("VerifiableCredential", "TestCredential")
+            );
         }
+
         requestCredDef.setCredentialSubject(new HashMap<>());
         req.setCredential_definition(requestCredDef);
 
         CredentialProof proof = new CredentialProof();
         proof.setProof_type("openid4vci-proof+jwt");
 
-        RSAKeyGenerator rsaKeyGenerator = new RSAKeyGenerator(2048);
         RSAKey r;
         try {
-            r = rsaKeyGenerator.generate();
+            r = new RSAKeyGenerator(2048).generate();
         } catch (JOSEException e) {
-            fail("failed to generate an RSA Keypair");
+            fail("Failed to generate an RSA keypair");
             throw new RuntimeException(e);
         }
-        JWSHeader proofJwtHeader = new JWSHeader(JWSAlgorithm.RS256, new JOSEObjectType("openid4vci-proof+jwt"), null, null, null,
-                r.toPublicJWK(), null, null, null, null, null, null, null);
+
+        JWSHeader proofJwtHeader = new JWSHeader(
+                JWSAlgorithm.RS256,
+                new JOSEObjectType("openid4vci-proof+jwt"),
+                null,
+                null,
+                null,
+                r.toPublicJWK(),
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+        );
+
         JWTClaimsSet proofJwtBody;
         try {
-            Map<String, Object> pj = Map.of("aud", "fake-aud", "nonce", TEST_CNONCE, "iss", "test-client");
-            proofJwtBody = JWTClaimsSet.parse(pj);
+            Map<String, Object> proofClaims = Map.of(
+                    "aud", "fake-aud",
+                    "nonce", TEST_CNONCE,
+                    "iss", "test-client"
+            );
+            proofJwtBody = JWTClaimsSet.parse(proofClaims);
         } catch (ParseException e) {
-            fail("failed to create a JWTClaimsSet");
+            fail("Failed to create a JWTClaimsSet");
             throw new RuntimeException(e);
         }
+
         SignedJWT requestProofJWT = new SignedJWT(proofJwtHeader, proofJwtBody);
         try {
             JWSSigner rsaSigner = new RSASSASigner(r);
             requestProofJWT.sign(rsaSigner);
         } catch (JOSEException e) {
-            fail("failed to create a signer");
+            fail("Failed to sign the proof JWT");
         }
+
         proof.setJwt(requestProofJWT.serialize());
         req.setProof(proof);
+
         return req;
     }
 
     @Test
-    public void getCredential_LDP_WithValidTransaction_Success() throws DataProviderExchangeException {
+    public void getCredential_LDP_WithValidTransaction_Success()
+            throws DataProviderExchangeException {
         request = createValidCredentialRequest(DEFAULT_FORMAT_LDP);
 
         when(parsedAccessToken.isActive()).thenReturn(true);
         when(parsedAccessToken.getClaims()).thenReturn(claimsFromAccessToken);
-        when(vciCacheService.getVCITransaction(TEST_ACCESS_TOKEN_HASH)).thenReturn(transaction);
-        when(proofValidatorFactory.getProofValidator(anyString())).thenReturn(proofValidator);
-
-        // Stub getKeyMaterial, its result is used in templateParams for createCredential
-        when(proofValidator.getKeyMaterial(any(CredentialProof.class))).thenReturn("");
-
-        when(proofValidator.validate(eq("test-client"), eq(TEST_CNONCE), any(CredentialProof.class), any())).thenReturn(true);
-        when(dataProviderPlugin.fetchData(claimsFromAccessToken)).thenReturn(new JSONObject().put("subjectKey", "subjectValue"));
+        when(vciCacheService.getVCITransaction(TEST_ACCESS_TOKEN_HASH))
+                .thenReturn(transaction);
+        when(proofValidatorFactory.getProofValidator(anyString()))
+                .thenReturn(proofValidator);
+        when(proofValidator.getKeyMaterial(any(CredentialProof.class)))
+                .thenReturn("");
+        when(proofValidator.validate(
+                eq("test-client"),
+                eq(TEST_CNONCE),
+                any(CredentialProof.class),
+                any()
+        )).thenReturn(true);
+        when(dataProviderPlugin.fetchData(claimsFromAccessToken))
+                .thenReturn(new JSONObject().put("subjectKey", "subjectValue"));
 
         W3CJsonLD mockW3CJsonLD = mock(W3CJsonLD.class);
-        when(credentialFactory.getCredential(DEFAULT_FORMAT_LDP)).thenReturn(Optional.of(mockW3CJsonLD));
-        when(mockW3CJsonLD.createCredential(anyMap(), anyString())).thenReturn("{\"unsigned\":\"credential\"}");
+        when(credentialFactory.getCredential(DEFAULT_FORMAT_LDP))
+                .thenReturn(Optional.of(mockW3CJsonLD));
+        when(mockW3CJsonLD.createCredential(anyMap(), anyString()))
+                .thenReturn("{\"unsigned\":\"credential\"}");
 
-        // Stub vcFormatter methods called by service's getVerifiableCredential method for addProof
-        when(vcFormatter.getProofAlgorithm(anyString())).thenReturn("EdDSA"); // Example value
-        when(vcFormatter.getAppID(anyString())).thenReturn("testAppIdLdp");   // Example value
-        when(vcFormatter.getRefID(anyString())).thenReturn("testRefIdLdp");   // Example value
-        when(vcFormatter.getDidUrl(anyString())).thenReturn("did:example:ldp"); // Example value
-        when(vcFormatter.getSignatureCryptoSuite(anyString())).thenReturn("testSignatureCryptoSuite"); // Example Value
+        mockVCFormatterForLdp();
 
-        // Corrected declaration of mockVcResultLdp
-        VCResult mockVcResultLdp = new VCResult<JsonLDObject>();
-        JsonLDObject signedCredObj = JsonLDObject.fromJson("{\"signed\":\"credential\", \"proof\":{}}");
+        VCResult<JsonLDObject> mockVcResultLdp = new VCResult<>();
+        JsonLDObject signedCredObj =
+                JsonLDObject.fromJson("{\"signed\":\"credential\", \"proof\":{}}");
         mockVcResultLdp.setCredential(signedCredObj);
 
-        // The holderId argument to addProof in the service is "" for LDP
         when(mockW3CJsonLD.addProof(
                 eq("{\"unsigned\":\"credential\"}"),
-                eq(""),  // Service code passes "" for LDP's addProof holderId
+                eq(""),
                 anyString(),
                 anyString(),
                 anyString(),
@@ -305,110 +447,193 @@ public class CertifyIssuanceServiceImplTest {
 
         assertNotNull("CredentialResponse should not be null", response);
         assertNotNull("Response credential should not be null", response.getCredential());
-        assertTrue("Response credential should be JsonLDObject", response.getCredential() instanceof JsonLDObject);
-        // Refined audit log matcher
-        verify(auditWrapper).logAudit(eq(Action.VC_ISSUANCE), eq(ActionStatus.SUCCESS), any(), isNull());
+        assertTrue(
+                "Response credential should be JsonLDObject",
+                response.getCredential() instanceof JsonLDObject
+        );
+
+        verify(auditWrapper).logAudit(
+                eq(Action.VC_ISSUANCE),
+                eq(ActionStatus.SUCCESS),
+                any(),
+                isNull()
+        );
+    }
+
+    private void mockVCFormatterForLdp() {
+        when(vcFormatter.getProofAlgorithm(anyString())).thenReturn("EdDSA");
+        when(vcFormatter.getAppID(anyString())).thenReturn("testAppIdLdp");
+        when(vcFormatter.getRefID(anyString())).thenReturn("testRefIdLdp");
+        when(vcFormatter.getDidUrl(anyString())).thenReturn("did:example:ldp");
+        when(vcFormatter.getSignatureCryptoSuite(anyString()))
+                .thenReturn("testSignatureCryptoSuite");
     }
 
     @Test
-    public void getCredential_UnsupportedFormatHandledByFactory_Fail() throws DataProviderExchangeException {
+    public void getCredential_UnsupportedFormatHandledByFactory_Fail()
+            throws DataProviderExchangeException {
         request = createValidCredentialRequest(DEFAULT_FORMAT_LDP);
+
         when(parsedAccessToken.isActive()).thenReturn(true);
         when(parsedAccessToken.getClaims()).thenReturn(claimsFromAccessToken);
-        when(vciCacheService.getVCITransaction(TEST_ACCESS_TOKEN_HASH)).thenReturn(transaction);
-        when(proofValidatorFactory.getProofValidator(anyString())).thenReturn(proofValidator);
-        when(proofValidator.validate(anyString(), anyString(), any(CredentialProof.class),any())).thenReturn(true);
+        when(vciCacheService.getVCITransaction(TEST_ACCESS_TOKEN_HASH))
+                .thenReturn(transaction);
+        when(proofValidatorFactory.getProofValidator(anyString()))
+                .thenReturn(proofValidator);
+        when(proofValidator.validate(
+                anyString(),
+                anyString(),
+                any(CredentialProof.class),
+                any()
+        )).thenReturn(true);
         when(dataProviderPlugin.fetchData(anyMap())).thenReturn(new JSONObject());
-        when(credentialFactory.getCredential(DEFAULT_FORMAT_LDP)).thenReturn(Optional.empty());
+        when(credentialFactory.getCredential(DEFAULT_FORMAT_LDP))
+                .thenReturn(Optional.empty());
 
-        CertifyException ex = assertThrows(CertifyException.class, () -> issuanceService.getCredential(request));
+        CertifyException ex = assertThrows(
+                CertifyException.class,
+                () -> issuanceService.getCredential(request)
+        );
         assertEquals("ERROR_SIGNING_QR_DATA", ex.getErrorCode());
     }
 
     @Test
-    public void getCredential_ValidRequest_DataProviderException_Fail() throws DataProviderExchangeException {
+    public void getCredential_ValidRequest_DataProviderException_Fail()
+            throws DataProviderExchangeException {
         request = createValidCredentialRequest(DEFAULT_FORMAT_LDP);
+
         when(parsedAccessToken.isActive()).thenReturn(true);
         when(parsedAccessToken.getClaims()).thenReturn(claimsFromAccessToken);
-        when(vciCacheService.getVCITransaction(TEST_ACCESS_TOKEN_HASH)).thenReturn(transaction);
-        when(proofValidatorFactory.getProofValidator(anyString())).thenReturn(proofValidator);
-        when(proofValidator.validate(anyString(), anyString(), any(CredentialProof.class),any())).thenReturn(true);
-        DataProviderExchangeException e = new DataProviderExchangeException("DP_FETCH_FAILED", "Failed to fetch data");
-        when(dataProviderPlugin.fetchData(claimsFromAccessToken)).thenThrow(e);
+        when(vciCacheService.getVCITransaction(TEST_ACCESS_TOKEN_HASH))
+                .thenReturn(transaction);
+        when(proofValidatorFactory.getProofValidator(anyString()))
+                .thenReturn(proofValidator);
 
-        CertifyException ex = assertThrows(CertifyException.class, () -> issuanceService.getCredential(request));
+        DataProviderExchangeException exception =
+                new DataProviderExchangeException(
+                        "DP_FETCH_FAILED",
+                        "Failed to fetch data"
+                );
+        when(dataProviderPlugin.fetchData(claimsFromAccessToken))
+                .thenThrow(exception);
+
+        CertifyException ex = assertThrows(
+                CertifyException.class,
+                () -> issuanceService.getCredential(request)
+        );
         assertEquals("DP_FETCH_FAILED", ex.getErrorCode());
     }
 
     @Test
     public void getCredential_ExpiredNonce_ThrowsInvalidNonceException() {
         request = createValidCredentialRequest(DEFAULT_FORMAT_LDP);
+
         VCIssuanceTransaction expiredTransaction = new VCIssuanceTransaction();
         expiredTransaction.setCNonce("expired-cnonce");
         expiredTransaction.setCNonceExpireSeconds(10);
-        expiredTransaction.setCNonceIssuedEpoch(LocalDateTime.now(ZoneOffset.UTC).minusSeconds(20).toEpochSecond(ZoneOffset.UTC));
+        expiredTransaction.setCNonceIssuedEpoch(
+                LocalDateTime.now(ZoneOffset.UTC)
+                        .minusSeconds(20)
+                        .toEpochSecond(ZoneOffset.UTC)
+        );
 
         when(parsedAccessToken.isActive()).thenReturn(true);
         when(parsedAccessToken.getClaims()).thenReturn(claimsFromAccessToken);
-        when(vciCacheService.getVCITransaction(TEST_ACCESS_TOKEN_HASH)).thenReturn(expiredTransaction);
-        when(securityHelperService.generateSecureRandomString(anyInt())).thenReturn("new-generated-cnonce");
-        when(vciCacheService.setVCITransaction(eq(TEST_ACCESS_TOKEN_HASH), any(VCIssuanceTransaction.class)))
-                .thenAnswer(invocation -> invocation.getArgument(1));
+        when(vciCacheService.getVCITransaction(TEST_ACCESS_TOKEN_HASH))
+                .thenReturn(expiredTransaction);
+        when(securityHelperService.generateSecureRandomString(anyInt()))
+                .thenReturn("new-generated-cnonce");
+        when(vciCacheService.setVCITransaction(
+                eq(TEST_ACCESS_TOKEN_HASH),
+                any(VCIssuanceTransaction.class)
+        )).thenAnswer(invocation -> invocation.getArgument(1));
 
-        assertThrows(InvalidNonceException.class, () -> issuanceService.getCredential(request));
+        assertThrows(
+                InvalidNonceException.class,
+                () -> issuanceService.getCredential(request)
+        );
     }
 
     @Test
     public void getCredential_NullTransactionForCNonceAndNoCNonceInToken_ThrowsInvalidNonceException() {
         request = createValidCredentialRequest(DEFAULT_FORMAT_LDP);
-        Map<String, Object> claimsWithoutCNonce = new HashMap<>(claimsFromAccessToken);
-        claimsWithoutCNonce.remove(Constants.C_NONCE); // Ensure c_nonce isn't in access token claims
-        claimsWithoutCNonce.remove(Constants.C_NONCE_EXPIRES_IN);
 
+        Map<String, Object> claimsWithoutCNonce =
+                new HashMap<>(claimsFromAccessToken);
+        claimsWithoutCNonce.remove(Constants.C_NONCE);
+        claimsWithoutCNonce.remove(Constants.C_NONCE_EXPIRES_IN);
 
         when(parsedAccessToken.isActive()).thenReturn(true);
         when(parsedAccessToken.getClaims()).thenReturn(claimsWithoutCNonce);
-        when(vciCacheService.getVCITransaction(TEST_ACCESS_TOKEN_HASH)).thenReturn(null);
-        when(securityHelperService.generateSecureRandomString(anyInt())).thenReturn("new-generated-cnonce");
-        when(vciCacheService.setVCITransaction(eq(TEST_ACCESS_TOKEN_HASH), any(VCIssuanceTransaction.class)))
-                .thenAnswer(invocation -> invocation.getArgument(1));
+        when(vciCacheService.getVCITransaction(TEST_ACCESS_TOKEN_HASH))
+                .thenReturn(null);
+        when(securityHelperService.generateSecureRandomString(anyInt()))
+                .thenReturn("new-generated-cnonce");
+        when(vciCacheService.setVCITransaction(
+                eq(TEST_ACCESS_TOKEN_HASH),
+                any(VCIssuanceTransaction.class)
+        )).thenAnswer(invocation -> invocation.getArgument(1));
 
-        assertThrows(InvalidNonceException.class, () -> issuanceService.getCredential(request));
+        assertThrows(
+                InvalidNonceException.class,
+                () -> issuanceService.getCredential(request)
+        );
     }
 
     @Test
     public void getCredential_RequestValidatorFails_ThrowsInvalidRequestException() {
         request = createValidCredentialRequest(DEFAULT_FORMAT_LDP);
         request.setFormat("invalid format with spaces");
-        InvalidRequestException ex = assertThrows(InvalidRequestException.class, () -> issuanceService.getCredential(request));
-        assertEquals(VCIErrorConstants.UNSUPPORTED_CREDENTIAL_FORMAT, ex.getErrorCode());
+
+        InvalidRequestException ex = assertThrows(
+                InvalidRequestException.class,
+                () -> issuanceService.getCredential(request)
+        );
+        assertEquals(
+                VCIErrorConstants.UNSUPPORTED_CREDENTIAL_FORMAT,
+                ex.getErrorCode()
+        );
     }
 
     @Test
     public void getCredential_InvalidScope_Fail() {
         request = createValidCredentialRequest(DEFAULT_FORMAT_LDP);
-        Map<String, Object> claimsWithInvalidScope = new HashMap<>(claimsFromAccessToken);
+
+        Map<String, Object> claimsWithInvalidScope =
+                new HashMap<>(claimsFromAccessToken);
         claimsWithInvalidScope.put("scope", "unknown-scope");
 
         when(parsedAccessToken.isActive()).thenReturn(true);
         when(parsedAccessToken.getClaims()).thenReturn(claimsWithInvalidScope);
-        // mockGlobalCredentialIssuerMetadataDTO (from setUp) is configured for DEFAULT_SCOPE.
-        // So, "unknown-scope" will not be found by VCIssuanceUtil.getScopeCredentialMapping.
 
-        CertifyException ex = assertThrows(CertifyException.class, () -> issuanceService.getCredential(request));
+        CertifyException ex = assertThrows(
+                CertifyException.class,
+                () -> issuanceService.getCredential(request)
+        );
         assertEquals(VCIErrorConstants.INVALID_SCOPE, ex.getErrorCode());
     }
 
     @Test
     public void getCredential_InvalidProof_Fail() {
         request = createValidCredentialRequest(DEFAULT_FORMAT_LDP);
+
         when(parsedAccessToken.isActive()).thenReturn(true);
         when(parsedAccessToken.getClaims()).thenReturn(claimsFromAccessToken);
-        when(vciCacheService.getVCITransaction(TEST_ACCESS_TOKEN_HASH)).thenReturn(transaction);
-        when(proofValidatorFactory.getProofValidator(anyString())).thenReturn(proofValidator);
-        when(proofValidator.validate(anyString(), anyString(), any(CredentialProof.class),any())).thenReturn(false);
+        when(vciCacheService.getVCITransaction(TEST_ACCESS_TOKEN_HASH))
+                .thenReturn(transaction);
+        when(proofValidatorFactory.getProofValidator(anyString()))
+                .thenReturn(proofValidator);
+        when(proofValidator.validate(
+                anyString(),
+                anyString(),
+                any(CredentialProof.class),
+                any()
+        )).thenReturn(false);
 
-        CertifyException ex = assertThrows(CertifyException.class, () -> issuanceService.getCredential(request));
+        CertifyException ex = assertThrows(
+                CertifyException.class,
+                () -> issuanceService.getCredential(request)
+        );
         assertEquals(VCIErrorConstants.INVALID_PROOF, ex.getErrorCode());
     }
 
@@ -416,7 +641,11 @@ public class CertifyIssuanceServiceImplTest {
     public void getVerifiableCredential_NotAuthenticated_ThrowsNotAuthenticatedException() {
         request = createValidCredentialRequest(DEFAULT_FORMAT_LDP);
         when(parsedAccessToken.isActive()).thenReturn(false);
-        assertThrows(NotAuthenticatedException.class, () -> issuanceService.getCredential(request));
+
+        assertThrows(
+                NotAuthenticatedException.class,
+                () -> issuanceService.getCredential(request)
+        );
     }
 
     @Test
@@ -425,95 +654,104 @@ public class CertifyIssuanceServiceImplTest {
 
         when(parsedAccessToken.isActive()).thenReturn(true);
         when(parsedAccessToken.getClaims()).thenReturn(claimsFromAccessToken);
-        when(vciCacheService.getVCITransaction(TEST_ACCESS_TOKEN_HASH)).thenReturn(transaction);
-        when(proofValidatorFactory.getProofValidator(anyString())).thenReturn(proofValidator);
-
-        // Crucial: Stub getKeyMaterial to return "" to match the addProof mock
-        when(proofValidator.getKeyMaterial(any(CredentialProof.class))).thenReturn("");
-
-        when(proofValidator.validate(anyString(), eq(TEST_CNONCE), any(CredentialProof.class), any())).thenReturn(true);
-        when(dataProviderPlugin.fetchData(claimsFromAccessToken)).thenReturn(new JSONObject().put("key", "value"));
+        when(vciCacheService.getVCITransaction(TEST_ACCESS_TOKEN_HASH))
+                .thenReturn(transaction);
+        when(proofValidatorFactory.getProofValidator(anyString()))
+                .thenReturn(proofValidator);
+        when(proofValidator.getKeyMaterial(any(CredentialProof.class)))
+                .thenReturn("");
+        when(proofValidator.validate(
+                anyString(),
+                eq(TEST_CNONCE),
+                any(CredentialProof.class),
+                any()
+        )).thenReturn(true);
+        when(dataProviderPlugin.fetchData(claimsFromAccessToken))
+                .thenReturn(new JSONObject().put("key", "value"));
 
         SDJWT mockSdJwt = mock(SDJWT.class);
-        when(credentialFactory.getCredential(DEFAULT_FORMAT_SDJWT)).thenReturn(Optional.of(mockSdJwt));
-        when(mockSdJwt.createCredential(anyMap(), anyString())).thenReturn("{\"unsigned\":\"sdjwt_payload\"}");
+        when(credentialFactory.getCredential(DEFAULT_FORMAT_SDJWT))
+                .thenReturn(Optional.of(mockSdJwt));
+        when(mockSdJwt.createCredential(anyMap(), anyString()))
+                .thenReturn("{\"unsigned\":\"sdjwt_payload\"}");
 
-        // Corrected declaration of mockVcResultSdJwt
-        VCResult mockVcResultSdJwt = new VCResult<String>();
-        mockVcResultSdJwt.setCredential("signed.sdjwt.string~disclosure1~disclosure2");
+        VCResult<String> mockVcResultSdJwt = new VCResult<>();
+        mockVcResultSdJwt.setCredential(
+                "signed.sdjwt.string~disclosure1~disclosure2"
+        );
 
-        // Ensure vcFormatter methods are mocked if they are called and their results are important
-        // For anyString() matchers in addProof, nulls are fine, but it's good practice if specific values are expected elsewhere
-        when(vcFormatter.getProofAlgorithm(anyString())).thenReturn("EdDSA"); // Example value
-        when(vcFormatter.getAppID(anyString())).thenReturn("testAppId");       // Example value
-        when(vcFormatter.getRefID(anyString())).thenReturn("testRefId");       // Example value
-        when(vcFormatter.getDidUrl(anyString())).thenReturn("did:example:123"); // Example value
-        when(vcFormatter.getSignatureCryptoSuite(anyString())).thenReturn("testSignatureCryptoSuite"); // Example Value
+        when(vcFormatter.getProofAlgorithm(anyString())).thenReturn("EdDSA");
+        when(vcFormatter.getAppID(anyString())).thenReturn("testAppId");
+        when(vcFormatter.getRefID(anyString())).thenReturn("testRefId");
+        when(vcFormatter.getDidUrl(anyString())).thenReturn("did:example:123");
+        when(vcFormatter.getSignatureCryptoSuite(anyString()))
+                .thenReturn("testSignatureCryptoSuite");
 
         when(mockSdJwt.addProof(
-                eq("{\"unsigned\":\"sdjwt_payload\"}"), // unsignedCredential
-                eq(""),                                 // holderId (now matches due to getKeyMaterial stub)
-                anyString(),                            // proofAlgorithm
-                anyString(),                            // keyManagerAppId
-                anyString(),                            // keyManagerRefId
-                anyString(),                             // didUrl
+                eq("{\"unsigned\":\"sdjwt_payload\"}"),
+                eq(""),
+                anyString(),
+                anyString(),
+                anyString(),
+                anyString(),
                 anyString()
-        )).thenReturn(mockVcResultSdJwt);           // Use thenReturn for now
+        )).thenReturn(mockVcResultSdJwt);
 
         CredentialResponse<?> response = issuanceService.getCredential(request);
 
-        assertNotNull("CredentialResponse should not be null", response);
-        assertNotNull("Response credential should not be null", response.getCredential());
-        assertTrue("Response credential should be a String", response.getCredential() instanceof String);
+        assertNotNull(response);
+        assertNotNull(response.getCredential());
+        assertTrue(response.getCredential() instanceof String);
+
         String credential = (String) response.getCredential();
-        assertTrue("Credential string should contain SD-JWT disclosure separator '~'", credential.contains("~"));
+        assertTrue(credential.contains("~"));
+
         verify(auditWrapper).logAudit(any(), any(), any(), isNull());
     }
 
     @Test
-    public void getCredential_LedgerStatusDetailAdded_WhenPurposeListAndContextMatch() throws Exception {
-        // Arrange
+    public void getCredential_LedgerStatusDetailAdded_WhenPurposeListAndContextMatch()
+            throws Exception {
         request = createValidCredentialRequest(DEFAULT_FORMAT_LDP);
-        // Add VCDM2Constants.URL to context to trigger the branch
         request.getCredential_definition().setContext(
                 List.of("https://www.w3.org/ns/credentials/v2")
         );
 
-        // Mock credentialFactory and W3CJsonLD
         when(parsedAccessToken.isActive()).thenReturn(true);
         when(parsedAccessToken.getClaims()).thenReturn(claimsFromAccessToken);
-        when(vciCacheService.getVCITransaction(TEST_ACCESS_TOKEN_HASH)).thenReturn(transaction);
-        when(proofValidatorFactory.getProofValidator(anyString())).thenReturn(proofValidator);
-
-        // Stub getKeyMaterial, its result is used in templateParams for createCredential
-        when(proofValidator.getKeyMaterial(any(CredentialProof.class))).thenReturn("");
-
-        when(proofValidator.validate(eq("test-client"), eq(TEST_CNONCE), any(CredentialProof.class), any())).thenReturn(true);
-        when(dataProviderPlugin.fetchData(claimsFromAccessToken)).thenReturn(new JSONObject().put("subjectKey", "subjectValue"));
+        when(vciCacheService.getVCITransaction(TEST_ACCESS_TOKEN_HASH))
+                .thenReturn(transaction);
+        when(proofValidatorFactory.getProofValidator(anyString()))
+                .thenReturn(proofValidator);
+        when(proofValidator.getKeyMaterial(any(CredentialProof.class)))
+                .thenReturn("");
+        when(proofValidator.validate(
+                eq("test-client"),
+                eq(TEST_CNONCE),
+                any(CredentialProof.class),
+                any()
+        )).thenReturn(true);
+        when(dataProviderPlugin.fetchData(claimsFromAccessToken))
+                .thenReturn(new JSONObject().put("subjectKey", "subjectValue"));
 
         W3CJsonLD mockW3CJsonLD = mock(W3CJsonLD.class);
-        when(credentialFactory.getCredential(DEFAULT_FORMAT_LDP)).thenReturn(Optional.of(mockW3CJsonLD));
-        when(mockW3CJsonLD.createCredential(anyMap(), anyString())).thenReturn("{\"unsigned\":\"credential\"}");
+        when(credentialFactory.getCredential(DEFAULT_FORMAT_LDP))
+                .thenReturn(Optional.of(mockW3CJsonLD));
+        when(mockW3CJsonLD.createCredential(anyMap(), anyString()))
+                .thenReturn("{\"unsigned\":\"credential\"}");
 
-        // Stub vcFormatter methods called by service's getVerifiableCredential method for addProof
-        when(vcFormatter.getProofAlgorithm(anyString())).thenReturn("EdDSA"); // Example value
-        when(vcFormatter.getAppID(anyString())).thenReturn("testAppIdLdp");   // Example value
-        when(vcFormatter.getRefID(anyString())).thenReturn("testRefIdLdp");   // Example value
-        when(vcFormatter.getDidUrl(anyString())).thenReturn("did:example:ldp"); // Example value
-        when(vcFormatter.getSignatureCryptoSuite(anyString())).thenReturn("testSignatureCryptoSuite"); // Example Value
-        // Mock credentialStatusPurposeList to be non-empty
-        List<String> statusPurposeList = List.of("revocation");
-        when(vcFormatter.getCredentialStatusPurpose(anyString())).thenReturn(statusPurposeList);
+        mockVCFormatterForLdp();
+        when(vcFormatter.getCredentialStatusPurpose(anyString()))
+                .thenReturn(List.of("revocation"));
 
-        // Corrected declaration of mockVcResultLdp
-        VCResult mockVcResultLdp = new VCResult<JsonLDObject>();
-        JsonLDObject signedCredObj = JsonLDObject.fromJson("{\"signed\":\"credential\", \"proof\":{}}");
-        mockVcResultLdp.setCredential(signedCredObj);
+        VCResult<JsonLDObject> mockVcResultLdp = new VCResult<>();
+        mockVcResultLdp.setCredential(
+                JsonLDObject.fromJson("{\"signed\":\"credential\", \"proof\":{}}")
+        );
 
-        // The holderId argument to addProof in the service is "" for LDP
         when(mockW3CJsonLD.addProof(
                 eq("{\"unsigned\":\"credential\"}"),
-                eq(""),  // Service code passes "" for LDP's addProof holderId
+                eq(""),
                 anyString(),
                 anyString(),
                 anyString(),
@@ -523,62 +761,63 @@ public class CertifyIssuanceServiceImplTest {
 
         CredentialResponse<?> response = issuanceService.getCredential(request);
 
-        assertNotNull("CredentialResponse should not be null", response);
-        assertNotNull("Response credential should not be null", response.getCredential());
-        assertTrue("Response credential should be JsonLDObject", response.getCredential() instanceof JsonLDObject);
+        assertNotNull(response);
+        assertNotNull(response.getCredential());
+        assertTrue(response.getCredential() instanceof JsonLDObject);
 
-        // Assert
-        verify(statusListCredentialService).addCredentialStatus(any(JSONObject.class), eq("revocation"));
+        verify(statusListCredentialService).addCredentialStatus(
+                any(JSONObject.class),
+                eq("revocation")
+        );
     }
 
     @Test
-    public void getCredential_LedgerEntryStored_WhenLedgerEnabled() throws Exception {
+    public void getCredential_LedgerEntryStored_WhenLedgerEnabled()
+            throws Exception {
         ReflectionTestUtils.setField(issuanceService, "isLedgerEnabled", true);
-        // Arrange
+
         request = createValidCredentialRequest(DEFAULT_FORMAT_LDP);
-        // Add VCDM2Constants.URL to context to trigger the branch
         request.getCredential_definition().setContext(
                 List.of("https://www.w3.org/ns/credentials/v2")
         );
 
-        // Mock credentialFactory and W3CJsonLD
         when(parsedAccessToken.isActive()).thenReturn(true);
         when(parsedAccessToken.getClaims()).thenReturn(claimsFromAccessToken);
-        when(vciCacheService.getVCITransaction(TEST_ACCESS_TOKEN_HASH)).thenReturn(transaction);
-        when(proofValidatorFactory.getProofValidator(anyString())).thenReturn(proofValidator);
-
-        // Stub getKeyMaterial, its result is used in templateParams for createCredential
-        when(proofValidator.getKeyMaterial(any(CredentialProof.class))).thenReturn("");
-
-        when(proofValidator.validate(eq("test-client"), eq(TEST_CNONCE), any(CredentialProof.class), any())).thenReturn(true);
-        when(dataProviderPlugin.fetchData(claimsFromAccessToken)).thenReturn(new JSONObject().put("subjectKey", "subjectValue"));
+        when(vciCacheService.getVCITransaction(TEST_ACCESS_TOKEN_HASH))
+                .thenReturn(transaction);
+        when(proofValidatorFactory.getProofValidator(anyString()))
+                .thenReturn(proofValidator);
+        when(proofValidator.getKeyMaterial(any(CredentialProof.class)))
+                .thenReturn("");
+        when(proofValidator.validate(
+                eq("test-client"),
+                eq(TEST_CNONCE),
+                any(CredentialProof.class),
+                any()
+        )).thenReturn(true);
+        when(dataProviderPlugin.fetchData(claimsFromAccessToken))
+                .thenReturn(new JSONObject().put("subjectKey", "subjectValue"));
 
         W3CJsonLD mockW3CJsonLD = mock(W3CJsonLD.class);
-        when(credentialFactory.getCredential(DEFAULT_FORMAT_LDP)).thenReturn(Optional.of(mockW3CJsonLD));
-        when(mockW3CJsonLD.createCredential(anyMap(), anyString())).thenReturn("{\"unsigned\":\"credential\"}");
+        when(credentialFactory.getCredential(DEFAULT_FORMAT_LDP))
+                .thenReturn(Optional.of(mockW3CJsonLD));
+        when(mockW3CJsonLD.createCredential(anyMap(), anyString()))
+                .thenReturn("{\"unsigned\":\"credential\"}");
 
-        // Stub vcFormatter methods called by service's getVerifiableCredential method for addProof
-        when(vcFormatter.getProofAlgorithm(anyString())).thenReturn("EdDSA"); // Example value
-        when(vcFormatter.getAppID(anyString())).thenReturn("testAppIdLdp");   // Example value
-        when(vcFormatter.getRefID(anyString())).thenReturn("testRefIdLdp");   // Example value
-        when(vcFormatter.getDidUrl(anyString())).thenReturn("did:example:ldp"); // Example value
-        when(vcFormatter.getSignatureCryptoSuite(anyString())).thenReturn("testSignatureCryptoSuite"); // Example Value
-        // Mock credentialStatusPurposeList to be non-empty
-        List<String> statusPurposeList = List.of("revocation");
-        when(vcFormatter.getCredentialStatusPurpose(anyString())).thenReturn(statusPurposeList);
-        // Mock ledgerUtils and vcFormatter
-        when(ledgerUtils.extractIndexedAttributes(any())).thenReturn(Map.of("attr", "val"));
-        when(vcFormatter.getCredentialStatusPurpose(anyString())).thenReturn(statusPurposeList);
+        mockVCFormatterForLdp();
+        when(vcFormatter.getCredentialStatusPurpose(anyString()))
+                .thenReturn(List.of("revocation"));
+        when(ledgerUtils.extractIndexedAttributes(any()))
+                .thenReturn(Map.of("attr", "val"));
 
-        // Corrected declaration of mockVcResultLdp
-        VCResult mockVcResultLdp = new VCResult<JsonLDObject>();
-        JsonLDObject signedCredObj = JsonLDObject.fromJson("{\"signed\":\"credential\", \"proof\":{}}");
-        mockVcResultLdp.setCredential(signedCredObj);
+        VCResult<JsonLDObject> mockVcResultLdp = new VCResult<>();
+        mockVcResultLdp.setCredential(
+                JsonLDObject.fromJson("{\"signed\":\"credential\", \"proof\":{}}")
+        );
 
-        // The holderId argument to addProof in the service is "" for LDP
         when(mockW3CJsonLD.addProof(
                 eq("{\"unsigned\":\"credential\"}"),
-                eq(""),  // Service code passes "" for LDP's addProof holderId
+                eq(""),
                 anyString(),
                 anyString(),
                 anyString(),
@@ -588,51 +827,63 @@ public class CertifyIssuanceServiceImplTest {
 
         CredentialResponse<?> response = issuanceService.getCredential(request);
 
-        assertNotNull("CredentialResponse should not be null", response);
-        assertNotNull("Response credential should not be null", response.getCredential());
-        assertTrue("Response credential should be JsonLDObject", response.getCredential() instanceof JsonLDObject);
+        assertNotNull(response);
+        assertNotNull(response.getCredential());
 
-        // Act
-        issuanceService.getCredential(request);
+        // One issuance call is sufficient for this verification.
         verify(credentialLedgerService, atLeastOnce()).storeLedgerEntry(
-                isNull(), anyString(), anyString(), isNull(), anyMap(), any(LocalDateTime.class)
+                isNull(),
+                anyString(),
+                anyString(),
+                isNull(),
+                anyMap(),
+                any(LocalDateTime.class)
         );
     }
 
     @Test
     public void getCredential_MDOC_Success() throws Exception {
-        // Create MDOC request with matching doctype
         request = createValidCredentialRequest(DEFAULT_FORMAT_MDOC);
         request.setDoctype("org.iso.18013.5.1.mDL");
 
-        try (MockedStatic<CredentialRequestValidator> mockedValidator = mockStatic(CredentialRequestValidator.class)) {
-            mockedValidator.when(() -> CredentialRequestValidator.isValid(any(CredentialRequest.class))).thenReturn(true);
+        try (MockedStatic<CredentialRequestValidator> mockedValidator =
+                     mockStatic(CredentialRequestValidator.class)) {
+            mockedValidator.when(
+                    () -> CredentialRequestValidator.isValid(any(CredentialRequest.class))
+            ).thenReturn(true);
 
             when(parsedAccessToken.isActive()).thenReturn(true);
             when(parsedAccessToken.getClaims()).thenReturn(claimsFromAccessToken);
-            when(vciCacheService.getVCITransaction(TEST_ACCESS_TOKEN_HASH)).thenReturn(transaction);
-            when(proofValidatorFactory.getProofValidator(anyString())).thenReturn(proofValidator);
+            when(vciCacheService.getVCITransaction(TEST_ACCESS_TOKEN_HASH))
+                    .thenReturn(transaction);
+            when(proofValidatorFactory.getProofValidator(anyString()))
+                    .thenReturn(proofValidator);
+            when(proofValidator.getKeyMaterial(any(CredentialProof.class)))
+                    .thenReturn("");
+            when(proofValidator.validate(
+                    eq("test-client"),
+                    eq(TEST_CNONCE),
+                    any(CredentialProof.class),
+                    any()
+            )).thenReturn(true);
+            when(dataProviderPlugin.fetchData(claimsFromAccessToken))
+                    .thenReturn(new JSONObject().put("key", "value"));
 
-            // Stub getKeyMaterial to return ""
-            when(proofValidator.getKeyMaterial(any(CredentialProof.class))).thenReturn("");
-
-            when(proofValidator.validate(eq("test-client"), eq(TEST_CNONCE), any(CredentialProof.class), any())).thenReturn(true);
-            when(dataProviderPlugin.fetchData(claimsFromAccessToken)).thenReturn(new JSONObject().put("key", "value"));
-
-            // Mock the mDOC credential
             MDocCredential mockMdoc = mock(MDocCredential.class);
-            when(credentialFactory.getCredential(DEFAULT_FORMAT_MDOC)).thenReturn(Optional.of(mockMdoc));
-            when(mockMdoc.createCredential(anyMap(), anyString())).thenReturn("unsigned_mdoc_data");
+            when(credentialFactory.getCredential(DEFAULT_FORMAT_MDOC))
+                    .thenReturn(Optional.of(mockMdoc));
+            when(mockMdoc.createCredential(anyMap(), anyString()))
+                    .thenReturn("unsigned_mdoc_data");
 
-            VCResult mockVcResultMdoc = new VCResult<String>();
+            VCResult<String> mockVcResultMdoc = new VCResult<>();
             mockVcResultMdoc.setCredential("signed.mdoc.credential.data");
 
-            // Stub vcFormatter methods
             when(vcFormatter.getProofAlgorithm(anyString())).thenReturn("ES256");
             when(vcFormatter.getAppID(anyString())).thenReturn("testAppIdMdoc");
             when(vcFormatter.getRefID(anyString())).thenReturn("testRefIdMdoc");
             when(vcFormatter.getDidUrl(anyString())).thenReturn("did:example:mdoc");
-            when(vcFormatter.getSignatureCryptoSuite(anyString())).thenReturn("testSignatureCryptoSuite");
+            when(vcFormatter.getSignatureCryptoSuite(anyString()))
+                    .thenReturn("testSignatureCryptoSuite");
 
             when(mockMdoc.addProof(
                     eq("unsigned_mdoc_data"),
@@ -646,77 +897,116 @@ public class CertifyIssuanceServiceImplTest {
 
             CredentialResponse<?> response = issuanceService.getCredential(request);
 
-            assertNotNull("CredentialResponse should not be null", response);
-            assertNotNull("Response credential should not be null", response.getCredential());
-            assertTrue("Response credential should be a String", response.getCredential() instanceof String);
-            String credential = (String) response.getCredential();
-            assertEquals("signed.mdoc.credential.data", credential);
+            assertNotNull(response);
+            assertNotNull(response.getCredential());
+            assertTrue(response.getCredential() instanceof String);
+            assertEquals(
+                    "signed.mdoc.credential.data",
+                    response.getCredential()
+            );
+
             verify(auditWrapper).logAudit(any(), any(), any(), isNull());
         }
     }
 
     @Test
-    public void getCredential_QRDataPresent_Claim169ValuesAdded() throws Exception {
+    public void getCredential_QRDataPresent_Claim169ValuesAdded()
+            throws Exception {
         request = createValidCredentialRequest(DEFAULT_FORMAT_LDP);
 
         when(parsedAccessToken.isActive()).thenReturn(true);
         when(parsedAccessToken.getClaims()).thenReturn(claimsFromAccessToken);
-        when(vciCacheService.getVCITransaction(TEST_ACCESS_TOKEN_HASH)).thenReturn(transaction);
-        when(proofValidatorFactory.getProofValidator(anyString())).thenReturn(proofValidator);
-        when(proofValidator.getKeyMaterial(any(CredentialProof.class))).thenReturn("");
-        when(proofValidator.validate(anyString(), anyString(), any(CredentialProof.class), any())).thenReturn(true);
-        when(dataProviderPlugin.fetchData(claimsFromAccessToken)).thenReturn(new JSONObject().put("subjectKey", "subjectValue"));
+        when(vciCacheService.getVCITransaction(TEST_ACCESS_TOKEN_HASH))
+                .thenReturn(transaction);
+        when(proofValidatorFactory.getProofValidator(anyString()))
+                .thenReturn(proofValidator);
+        when(proofValidator.getKeyMaterial(any(CredentialProof.class)))
+                .thenReturn("");
+        when(proofValidator.validate(
+                anyString(),
+                anyString(),
+                any(CredentialProof.class),
+                any()
+        )).thenReturn(true);
+        when(dataProviderPlugin.fetchData(claimsFromAccessToken))
+                .thenReturn(new JSONObject().put("subjectKey", "subjectValue"));
 
-        // Mock credential and QR data
         W3CJsonLD mockW3CJsonLD = mock(W3CJsonLD.class);
-        when(credentialFactory.getCredential(DEFAULT_FORMAT_LDP)).thenReturn(Optional.of(mockW3CJsonLD));
-        when(mockW3CJsonLD.createCredential(anyMap(), anyString())).thenReturn("{\"unsigned\":\"credential\"}");
+        when(credentialFactory.getCredential(DEFAULT_FORMAT_LDP))
+                .thenReturn(Optional.of(mockW3CJsonLD));
+        when(mockW3CJsonLD.createCredential(anyMap(), anyString()))
+                .thenReturn("{\"unsigned\":\"credential\"}");
 
-        // Prepare a non-empty QR data array
         JSONArray qrData = new JSONArray();
         JSONObject qrData1 = new JSONObject().put("qr", "data1");
-        qrData.put(qrData1);
         JSONObject qrData2 = new JSONObject().put("qr", "data2");
+        qrData.put(qrData1);
         qrData.put(qrData2);
-        when(mockW3CJsonLD.createQRData(anyMap(), anyString())).thenReturn(qrData);
 
-        Object mappedData1 = "mappedData1";
-        Object mappedData2 = "mappedData2";
-        when(pixelPass.getMappedData(eq(qrData1), anyMap(), anyMap(), eq(true))).thenReturn(mappedData1);
-        when(pixelPass.getMappedData(eq(qrData2), anyMap(), anyMap(), eq(true))).thenReturn(mappedData2);
+        when(mockW3CJsonLD.createQRData(anyMap(), anyString()))
+                .thenReturn(qrData);
+        when(pixelPass.getMappedData(eq(qrData1), anyMap(), anyMap(), eq(true)))
+                .thenReturn("mappedData1");
+        when(pixelPass.getMappedData(eq(qrData2), anyMap(), anyMap(), eq(true)))
+                .thenReturn("mappedData2");
 
-        // Mock signQRData to return signed QR strings
-        when(mockW3CJsonLD.signQRData(eq("mappedData1"), anyString(), anyString(), anyString(), anyString()))
-                .thenReturn("signedQR1");
-        when(mockW3CJsonLD.signQRData(eq("mappedData2"), anyString(), anyString(), anyString(), anyString()))
-                .thenReturn("signedQR2");
+        when(mockW3CJsonLD.signQRData(
+                eq("mappedData1"),
+                anyString(),
+                anyString(),
+                anyString(),
+                anyString()
+        )).thenReturn("signedQR1");
 
-        when(pixelPass.generateQRData(eq("signedQR1"), eq(""))).thenReturn("qrCodeData1");
-        when(pixelPass.generateQRData(eq("signedQR2"), eq(""))).thenReturn("qrCodeData2");
-        // Usual formatter mocks
-        when(vcFormatter.getProofAlgorithm(anyString())).thenReturn("EdDSA");
-        when(vcFormatter.getAppID(anyString())).thenReturn("testAppIdLdp");
-        when(vcFormatter.getRefID(anyString())).thenReturn("testRefIdLdp");
-        when(vcFormatter.getDidUrl(anyString())).thenReturn("did:example:ldp");
-        when(vcFormatter.getSignatureCryptoSuite(anyString())).thenReturn("testSignatureCryptoSuite");
+        when(mockW3CJsonLD.signQRData(
+                eq("mappedData2"),
+                anyString(),
+                anyString(),
+                anyString(),
+                anyString()
+        )).thenReturn("signedQR2");
 
-        VCResult mockVcResultLdp = new VCResult<JsonLDObject>();
-        JsonLDObject signedCredObj = JsonLDObject.fromJson("{\"signed\":\"credential\", \"proof\":{}}");
-        mockVcResultLdp.setCredential(signedCredObj);
+        when(pixelPass.generateQRData(eq("signedQR1"), eq("")))
+                .thenReturn("qrCodeData1");
+        when(pixelPass.generateQRData(eq("signedQR2"), eq("")))
+                .thenReturn("qrCodeData2");
 
-        when(mockW3CJsonLD.addProof(anyString(), anyString(), anyString(), anyString(), anyString(), anyString(), anyString()))
-                .thenReturn(mockVcResultLdp);
+        mockVCFormatterForLdp();
+
+        VCResult<JsonLDObject> mockVcResultLdp = new VCResult<>();
+        mockVcResultLdp.setCredential(
+                JsonLDObject.fromJson("{\"signed\":\"credential\", \"proof\":{}}")
+        );
+
+        when(mockW3CJsonLD.addProof(
+                anyString(),
+                anyString(),
+                anyString(),
+                anyString(),
+                anyString(),
+                anyString(),
+                anyString()
+        )).thenReturn(mockVcResultLdp);
 
         CredentialResponse<?> response = issuanceService.getCredential(request);
 
         assertNotNull(response);
         assertNotNull(response.getCredential());
-        // Check that claim_169_values is present and contains the signed QR codes
-        ArgumentCaptor<Map<String, Object>> templateParamsCaptor = ArgumentCaptor.forClass(Map.class);
-        verify(mockW3CJsonLD).createCredential(templateParamsCaptor.capture(), anyString());
+
+        ArgumentCaptor<Map<String, Object>> templateParamsCaptor =
+                ArgumentCaptor.forClass(Map.class);
+        verify(mockW3CJsonLD).createCredential(
+                templateParamsCaptor.capture(),
+                anyString()
+        );
+
         Map<String, Object> usedParams = templateParamsCaptor.getValue();
         assertTrue(usedParams.containsKey("claim_169_values"));
-        List<String> claim169Values = (List<String>) usedParams.get("claim_169_values");
+
+        @SuppressWarnings("unchecked")
+        List<String> claim169Values =
+                (List<String>) usedParams.get("claim_169_values");
+
         assertEquals(2, claim169Values.size());
         assertTrue(claim169Values.contains("qrCodeData1"));
         assertTrue(claim169Values.contains("qrCodeData2"));
@@ -728,41 +1018,59 @@ public class CertifyIssuanceServiceImplTest {
 
         when(parsedAccessToken.isActive()).thenReturn(true);
         when(parsedAccessToken.getClaims()).thenReturn(claimsFromAccessToken);
-        when(vciCacheService.getVCITransaction(TEST_ACCESS_TOKEN_HASH)).thenReturn(transaction);
-        when(proofValidatorFactory.getProofValidator(anyString())).thenReturn(proofValidator);
-        when(proofValidator.getKeyMaterial(any(CredentialProof.class))).thenReturn("");
-        when(proofValidator.validate(anyString(), anyString(), any(CredentialProof.class), any())).thenReturn(true);
-        when(dataProviderPlugin.fetchData(claimsFromAccessToken)).thenReturn(new JSONObject().put("subjectKey", "subjectValue"));
+        when(vciCacheService.getVCITransaction(TEST_ACCESS_TOKEN_HASH))
+                .thenReturn(transaction);
+        when(proofValidatorFactory.getProofValidator(anyString()))
+                .thenReturn(proofValidator);
+        when(proofValidator.getKeyMaterial(any(CredentialProof.class)))
+                .thenReturn("");
+        when(proofValidator.validate(
+                anyString(),
+                anyString(),
+                any(CredentialProof.class),
+                any()
+        )).thenReturn(true);
+        when(dataProviderPlugin.fetchData(claimsFromAccessToken))
+                .thenReturn(new JSONObject().put("subjectKey", "subjectValue"));
 
         W3CJsonLD mockW3CJsonLD = mock(W3CJsonLD.class);
-        when(credentialFactory.getCredential(DEFAULT_FORMAT_LDP)).thenReturn(Optional.of(mockW3CJsonLD));
-        when(mockW3CJsonLD.createCredential(anyMap(), anyString())).thenReturn("{\"unsigned\":\"credential\"}");
-        // Return null for QR data
-        when(mockW3CJsonLD.createQRData(anyMap(), anyString())).thenReturn(null);
+        when(credentialFactory.getCredential(DEFAULT_FORMAT_LDP))
+                .thenReturn(Optional.of(mockW3CJsonLD));
+        when(mockW3CJsonLD.createCredential(anyMap(), anyString()))
+                .thenReturn("{\"unsigned\":\"credential\"}");
+        when(mockW3CJsonLD.createQRData(anyMap(), anyString()))
+                .thenReturn(null);
 
-        when(vcFormatter.getProofAlgorithm(anyString())).thenReturn("EdDSA");
-        when(vcFormatter.getAppID(anyString())).thenReturn("testAppIdLdp");
-        when(vcFormatter.getRefID(anyString())).thenReturn("testRefIdLdp");
-        when(vcFormatter.getDidUrl(anyString())).thenReturn("did:example:ldp");
-        when(vcFormatter.getSignatureCryptoSuite(anyString())).thenReturn("testSignatureCryptoSuite");
+        mockVCFormatterForLdp();
 
-        VCResult mockVcResultLdp = new VCResult<JsonLDObject>();
-        JsonLDObject signedCredObj = JsonLDObject.fromJson("{\"signed\":\"credential\", \"proof\":{}}");
-        mockVcResultLdp.setCredential(signedCredObj);
+        VCResult<JsonLDObject> mockVcResultLdp = new VCResult<>();
+        mockVcResultLdp.setCredential(
+                JsonLDObject.fromJson("{\"signed\":\"credential\", \"proof\":{}}")
+        );
 
-        when(mockW3CJsonLD.addProof(anyString(), anyString(), anyString(), anyString(), anyString(), anyString(), anyString()))
-                .thenReturn(mockVcResultLdp);
+        when(mockW3CJsonLD.addProof(
+                anyString(),
+                anyString(),
+                anyString(),
+                anyString(),
+                anyString(),
+                anyString(),
+                anyString()
+        )).thenReturn(mockVcResultLdp);
 
-        // You may want to use a log capturing library to assert the warning log, but here we just ensure no exception
         CredentialResponse<?> response = issuanceService.getCredential(request);
 
         assertNotNull(response);
         assertNotNull(response.getCredential());
-        // Optionally, verify that claim_169_values is not present
-        ArgumentCaptor<Map<String, Object>> templateParamsCaptor = ArgumentCaptor.forClass(Map.class);
-        verify(mockW3CJsonLD).createCredential(templateParamsCaptor.capture(), anyString());
+
+        ArgumentCaptor<Map<String, Object>> templateParamsCaptor =
+                ArgumentCaptor.forClass(Map.class);
+        verify(mockW3CJsonLD).createCredential(
+                templateParamsCaptor.capture(),
+                anyString()
+        );
+
         Map<String, Object> usedParams = templateParamsCaptor.getValue();
         assertFalse(usedParams.containsKey("claim_169_values"));
     }
-
 }
