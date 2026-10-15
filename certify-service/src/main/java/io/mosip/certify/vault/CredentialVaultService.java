@@ -110,12 +110,19 @@ public class CredentialVaultService {
         Map<String, Object> vcMap = null;
         if (credential instanceof JsonLDObject jsonLd) {
             vcMap = jsonLd.getJsonObject();
-            try {
-                vcText = MAPPER.writeValueAsString(vcMap);
-            } catch (JsonProcessingException e) {
-                log.error("Could not serialise credential {} for the vault", credentialId, e);
-                throw new CertifyException("VC_VAULT_STORE_FAILED", "Could not serialise the issued credential");
-            }
+             try {
+                    // deep copy so the VC returned to the wallet is not modified
+                    Map<String, Object> storedMap = MAPPER.convertValue(
+                            vcMap, new TypeReference<LinkedHashMap<String, Object>>() {});
+                    Object subject = storedMap.get("credentialSubject");
+                    if (subject instanceof Map<?, ?> s) {
+                        ((Map<String, Object>) s).remove("claim169");
+                    }
+                    vcText = MAPPER.writeValueAsString(storedMap);
+                } catch (JsonProcessingException e) {
+                    log.error("Could not serialise credential {} for the vault", credentialId, e);
+                    throw new CertifyException("VC_VAULT_STORE_FAILED", "Could not serialise the issued credential");
+                }
         } else {
             vcText = String.valueOf(credential); // e.g. an SD-JWT string
         }
