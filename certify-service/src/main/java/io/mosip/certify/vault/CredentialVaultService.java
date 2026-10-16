@@ -18,6 +18,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
+import com.fasterxml.jackson.core.type.TypeReference;
+import java.util.LinkedHashMap;
 
 /**
  * Keeps a copy of every signed credential in the `vc_vault` schema, so a wallet download (eSignet OTP
